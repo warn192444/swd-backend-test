@@ -38,24 +38,64 @@ class StudentSubjectsScoreAPIView(APIView):
 
         """
 
-        subjects_context = [{"id": 1, "title": "Math"}, {"id": 2, "title": "Physics"}, {"id": 3, "title": "Chemistry"},
-                            {"id": 4, "title": "Algorithm"}, {"id": 5, "title": "Coding"}]
+        subjects_context = [{"id": 1, "title": "Math"}, 
+                            {"id": 2, "title": "Physics"}, 
+                            {"id": 3, "title": "Chemistry"},
+                            {"id": 4, "title": "Algorithm"}, 
+                            {"id": 5, "title": "Coding"}]
 
         credits_context = [{"id": 6, "credit": 1, "subject_id_list_that_using_this_credit": [3]},
                            {"id": 7, "credit": 2, "subject_id_list_that_using_this_credit": [2, 4]},
                            {"id": 9, "credit": 3, "subject_id_list_that_using_this_credit": [1, 5]}]
 
-        credits_mapping = [{"subject_id": 1, "credit_id": 9}, {"subject_id": 2, "credit_id": 7},
-                           {"subject_id": 3, "credit_id": 6}, {"subject_id": 4, "credit_id": 7},
+        credits_mapping = [{"subject_id": 1, "credit_id": 9}, 
+                           {"subject_id": 2, "credit_id": 7},
+                           {"subject_id": 3, "credit_id": 6}, 
+                           {"subject_id": 4, "credit_id": 7},
                            {"subject_id": 5, "credit_id": 9}]
 
         student_first_name = request.data.get("first_name", None)
         student_last_name = request.data.get("last_name", None)
         subjects_title = request.data.get("subject_title", None)
         score = request.data.get("score", None)
+        
+        if not all([student_first_name, student_last_name, subjects_title, score]):
+            return Response({"message": "Payload data is incomplete."}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not isinstance(student_first_name, str) or not isinstance(student_last_name, str) or not isinstance(subjects_title, str) or not isinstance(score, int):
+            return Response({"message": "Payload data type is invalid"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if score < 0 or score > 100:
+            return Response({"message": "Score must be equal to or greater than 0 and equal to or less than 100."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        student = Personnel.objects.filter(first_name=student_first_name, last_name=student_last_name, personnel_type=2).first()
+        subject = Subjects.objects.filter(title=subjects_title).first()
+        if not student or not subject:
+            return Response({"message": "Student or subject not found in database."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        student_subject_score = StudentSubjectsScore.objects.filter(student=student, subjects=subject).first()
+        if student_subject_score:
+            student_subject_score.score = score
+            student_subject_score.save()
+            return Response({"message": "Student's score updated successfully.", "student": f"{student.first_name} {student.last_name}", "subject": subject.title, "credit": student_subject_score.credit, "score": student_subject_score.score}, status=status.HTTP_200_OK)
+        else:
+            for item in subjects_context:
+                if item["title"] == subjects_title:
+                    subject_id = item["id"]
+            
+            for item in credits_mapping:
+                if item["subject_id"] == subject_id:
+                    credit_id = item["credit_id"]
+                    
+            for item in credits_context:
+                for i in item["subject_id_list_that_using_this_credit"]:
+                    if i == credit_id:
+                        credit = item["credit"]
+            StudentSubjectsScore.objects.create(student=student, subjects=subject, credit=credit, score=score)
+            return Response({"message": "Student's score created successfully.", "student": f"{student.first_name} {student.last_name}", "subject": subject.title, "credit": credit, "score": score}, status=status.HTTP_201_CREATED)
         # # Filter Objects Example
         # DataModel.objects.filter(filed_1=value_1, filed_2=value_2, filed_2=value_3)
+        
 
         # # Create Objects Example
         # DataModel.objects.create(filed_1=value_1, filed_2=value_2, filed_2=value_3)
@@ -87,6 +127,8 @@ class StudentSubjectsScoreDetailsAPIView(APIView):
         """
 
         student_id = kwargs.get("id", None)
+        student = Personnel.objects.filter(id=student_id).first()
+        
 
         example_context_data = {
             "student":
